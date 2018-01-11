@@ -1,84 +1,166 @@
-"""A Markov chain generator that can tweet random messages."""
+"""Generate Markov text from text files."""
 
 import os
-import sys
 from random import choice
+import sys
+import string
 import twitter
 
+api = twitter.Api(
+    consumer_key=os.environ['TWITTER_CONSUMER_KEY'],
+    consumer_secret=os.environ['TWITTER_CONSUMER_SECRET'],
+    access_token_key=os.environ['TWITTER_ACCESS_TOKEN_KEY'],
+    access_token_secret=os.environ['TWITTER_ACCESS_TOKEN_SECRET'])
 
-def open_and_read_file(filenames):
-    """Take list of files. Open them, read them, and return one long string."""
 
-    body = ""
+def open_and_read_files(file_paths):
+    """Take file path as string; return text as string.
 
-    for filename in filenames:
-        text_file = open(filename)
-        body = body + text_file.read()
-        text_file.close()
+    Takes a string that is a file path, opens the file, and turns
+    the file's contents as one string of text.
+    """
+    # mashup = []
 
-    return body
+    with open(file_paths) as f:
+        return f.read()
+
+    # with open(file_paths) as f:
+    #     mashup.append(f.read())
+    # print mashup
 
 
 def make_chains(text_string):
-    """Take input text as string; return dictionary of Markov chains."""
+    """Take input text as string; return dictionary of Markov chains.
 
+    A chain will be a key that consists of a tuple of (word1, word2)
+    and the value would be a list of the word(s) that follow those two
+    words in the input text.
+
+    For example:
+
+        >>> chains = make_chains("hi there mary hi there juanita")
+
+    Each bigram (except the last) will be a key in chains:
+
+        >>> sorted(chains.keys())
+        [('hi', 'there'), ('mary', 'hi'), ('there', 'mary')]
+
+    Each item in chains is a list of all possible following words:
+
+        >>> chains[('hi', 'there')]
+        ['mary', 'juanita']
+
+        >>> chains[('there','juanita')]
+        [None]
+    """
+    # code for bi-gram
+    # chains = {}
+
+    # words = text_string.split()
+    # words.append(None)
+
+    # for i in range(len(words)-2):
+    #     key = (words[i], words[i+1])
+
+    #     if chains.get(key):
+    #         chains[key].append(words[i+2])
+    #     else:
+    #         chains[key] = [words[i+2]]
+
+    # return chains
+
+    # code for tri-gram
     chains = {}
 
     words = text_string.split()
+    words.append(None)
 
-    for i in range(len(words) - 2):
-        key = (words[i], words[i + 1])
-        value = words[i + 2]
+    ngram = 3
 
-        if key not in chains:
-            chains[key] = []
+    for i in range(len(words)-ngram):
+        key = []
 
-        chains[key].append(value)
+        for j in range(ngram):
+            key.append(words[i+j])
+        key = tuple(key)
 
-        # or we could replace the last three lines with:
-        #    chains.setdefault(key, []).append(value)
+        if chains.get(key):
+            chains[key].append(words[i+ngram])
+        else:
+            chains[key] = [words[i + ngram]]
 
     return chains
 
 
 def make_text(chains):
-    """Take dictionary of Markov chains; return random text."""
+    """Return text from chains."""
 
-    key = choice(chains.keys())
-    words = [key[0], key[1]]
-    while key in chains:
-        # Keep looping until we have a key that isn't in the chains
-        # (which would mean it was the end of our original text).
-        #
-        # Note that for long texts (like a full book), this might mean
-        # it would run for a very long time.
+    punct = string.punctuation
 
-        word = choice(chains[key])
-        words.append(word)
-        key = (key[1], word)
+    while True:
+        ngram = choice(chains.keys())
 
-    return " ".join(words)
+        if ngram[0][0].isupper():
+            break
+
+    words = list(ngram)
+
+    while choice(chains[ngram]):
+        # words.extend([ngram[0], ngram[1]])
+        new_word = choice(chains[ngram])
+
+        if new_word is None:
+            break
+
+        words.append(new_word)
+
+        if new_word[-1] in punct:
+            break
+
+        # resetting for bi-gram
+        # ngram = (ngram[1], new_word)
+
+        # resetting for tri-gram
+        ngram = (ngram[1], ngram[2], new_word)
+
+    # The whole story in a long string
+    word_string = " ".join(words)
+
+    # Just the first 140 characters of the story, for our tweet
+    tweet_string = word_string[:141]
+
+    # This line is for tweeting Henry:
+    # tweet_string = "@SoylentBleen " + word_string[:127]
+
+    return tweet_string
 
 
-def tweet(chains):
-    """Create a tweet and send it to the Internet."""
+def tweet(chain):
+    """Take in chain, output 140 characters and tweet them until user quits"""
 
-    # Use Python os.environ to get at environmental variables
-    # Note: you must run `source secrets.sh` before running this file
-    # to make sure these environmental variables are set.
+    while True:
+        status = api.PostUpdate(chain)
+        print(status.text)
 
-    pass
+        user_input = raw_input("Enter to tweet again [q to quit] > ")
+
+        if user_input.lower() == "q":
+            break
 
 
-# Get the filenames from the user through a command line prompt, ex:
-# python markov.py green-eggs.txt shakespeare.txt
-filenames = sys.argv[1:]
+# input_path = "green-eggs.txt"
+input_paths = sys.argv[1]
 
-# Open the files and turn them into one long string
-text = open_and_read_file(filenames)
+# Open the file and turn it into one long string
+input_text = open_and_read_files(input_paths)
 
 # Get a Markov chain
-chains = make_chains(text)
+chains = make_chains(input_text)
 
-# Your task is to write a new function tweet, that will take chains as input
-# tweet(chains)
+# Produce random text
+random_text = make_text(chains)
+
+# print random_text
+# print(api.VerifyCredentials())
+
+tweet(random_text)
